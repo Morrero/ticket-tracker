@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Теги</title>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <div class="container">
+        <h2>Управление тегами</h2>
+
+        <div style="margin-bottom:16px;">
+            <input id="tagName" placeholder="Название тега">
+            <button id="createTag">Добавить</button>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Название</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="tagsTable"></tbody>
+        </table>
+    </div>
+
+    <script>
+        const api = "/api.php";
+
+        function getTags() {
+            $.getJSON(api + "?route=/api/admin/tags", res => {
+                if (!res.ok) return;
+
+                let html = "";
+
+                res.tags.forEach(tag => {
+                    html += `
+        <tr>
+          <td>${tag.id}</td>
+          <td>
+            <input
+              value="${tag.name}"
+              onblur="saveTag(${tag.id}, this.value)"
+            >
+          </td>
+          <td>
+            <button class="secondary" onclick="removeTag(${tag.id})">
+              Удалить
+            </button>
+          </td>
+        </tr>
+      `;
+                });
+
+                $("#tagsTable").html(html);
+            });
+        }
+
+        $("#createTag").on("click", () => {
+            const name = $("#tagName").val().trim();
+            if (!name) return;
+
+            $.ajax({
+                url: api + "?route=/api/admin/tags/create",
+                method: "POST",
+                contentType: "application/json",
+                data: JSON.stringify({ name }),
+                success: () => {
+                    $("#tagName").val("");
+                    getTags();
+                }
+            });
+        });
+
+        function saveTag(id, name) {
+            if (!name.trim()) return;
+
+            $.ajax({
+                url: api + "?route=/api/admin/tags/update",
+                method: "POST",
+                contentType: "application/json",
+                data: JSON.stringify({ id, name })
+            });
+        }
+
+        function removeTag(id) {
+            if (!confirm("Удалить этот тег?")) return;
+
+            $.ajax({
+                url: api + "?route=/api/admin/tags/delete",
+                method: "POST",
+                contentType: "application/json",
+                data: JSON.stringify({ id }),
+                success: getTags
+            });
+        }
+
+        $(document).ready(getTags);
+    </script>
+
+</body>
+
+</html>

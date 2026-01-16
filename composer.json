@@ -1,0 +1,9 @@
+{
+    "name": "denis_4t8xnns/ticket-tracker",
+    "require": {},
+    "autoload": {
+        "psr-4": {
+            "App\\": "src/"
+        }
+    }
+}

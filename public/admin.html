@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Админ</title>
+
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <link rel="stylesheet" href="style.css">
+
+  <style>
+    .modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    .modal-box {
+      background: #fff;
+      padding: 20px;
+      width: 650px;
+      max-height: 80vh;
+      overflow-y: auto;
+      border-radius: 6px;
+    }
+
+    .modal-close {
+      float: right;
+      font-size: 22px;
+      cursor: pointer;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin: 10px 0;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 80px;
+      margin-top: 10px;
+    }
+
+    tr.row-click {
+      cursor: pointer;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="container">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <h2>Админ-панель</h2>
+      <div>
+        <button onclick="location.href='tags.html'">Теги</button>
+        <button id="logoutBtn">Выйти</button>
+      </div>
+    </div>
+
+    <h3>Фильтры</h3>
+    <div style="margin-bottom:12px;">
+      <select id="filterStatus">
+        <option value="">Все статусы</option>
+        <option value="1">ToDo</option>
+        <option value="2">InProgress</option>
+        <option value="3">Ready For Review</option>
+        <option value="4">Done</option>
+      </select>
+
+      <select id="filterSort">
+        <option value="created_at">Дата создания</option>
+        <option value="updated_at">Дата изменения</option>
+      </select>
+
+      <select id="filterDir">
+        <option value="desc">По убыванию</option>
+        <option value="asc">По возрастанию</option>
+      </select>
+
+      <button id="applyFilter">Применить</button>
+    </div>
+
+    <h3>Все тикеты</h3>
+
+    <table id="ticketsTable" border="1" width="100%">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Клиент</th>
+          <th>Заголовок</th>
+          <th>Описание</th>
+          <th>Статус</th>
+          <th>Теги</th>
+          <th>Действия</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+
+  
+  <div id="adminModal" class="modal" style="display:none;">
+    <div class="modal-box">
+      <span class="modal-close" onclick="closeModal()">&times;</span>
+
+      <h3 id="mTitle"></h3>
+      <p id="mDesc"></p>
+
+      <div class="meta">
+        <div><b>Клиент:</b> <span id="mClient"></span></div>
+        <div><b>Статус:</b> <span id="mStatus"></span></div>
+        <div><b>Создан:</b> <span id="mCreated"></span></div>
+        <div><b>Обновлён:</b> <span id="mUpdated"></span></div>
+      </div>
+
+      <h4>Комментарии</h4>
+      <ul id="mComments"></ul>
+
+      <textarea id="adminComment" placeholder="Ответ клиенту"></textarea>
+      <button onclick="sendComment()">Отправить</button>
+    </div>
+  </div>
+
+  <script>
+    const API = "/api.php";
+    let openedTicketId = null;
+
+    function statusLabel(id) {
+      const map = {
+        1: "ToDo",
+        2: "InProgress",
+        3: "Ready For Review",
+        4: "Done"
+      };
+      return map[id] || id;
+    }
+
+    function loadTickets() {
+      const params = new URLSearchParams();
+
+      const status = $("#filterStatus").val();
+      const sort = $("#filterSort").val();
+      const dir = $("#filterDir").val();
+
+      if (status) params.append("status", status);
+      params.append("sort", sort);
+      params.append("dir", dir);
+
+      $.getJSON(`${API}?route=/api/admin/tickets&${params}`, res => {
+        if (!res.ok) {
+          alert(res.error || "Ошибка загрузки");
+          return;
+        }
+
+        let html = "";
+
+        res.tickets.forEach(t => {
+          html += `
+        <tr class="row-click" onclick='openModal(${JSON.stringify(t)})'>
+          <td>${t.id}</td>
+          <td>${t.client_name ?? "-"}</td>
+          <td>${t.title}</td>
+          <td>${t.description}</td>
+          <td>${statusLabel(t.status_id)}</td>
+          <td>${t.tags ?? "-"}</td>
+          <td>
+            <button onclick="event.stopPropagation(); changeStatus(${t.id}, 2)">В работу</button>
+            <button onclick="event.stopPropagation(); changeStatus(${t.id}, 3)">На проверку</button>
+            <button onclick="event.stopPropagation(); changeStatus(${t.id}, 4)">Закрыть</button>
+            <button onclick="event.stopPropagation(); addTags(${t.id})">Теги</button>
+          </td>
+        </tr>
+      `;
+        });
+
+        $("#ticketsTable tbody").html(html);
+      });
+    }
+
+    function openModal(ticket) {
+      openedTicketId = ticket.id;
+
+      $("#mTitle").text(ticket.title);
+      $("#mDesc").text(ticket.description);
+      $("#mClient").text(ticket.client_name ?? "-");
+      $("#mStatus").text(statusLabel(ticket.status_id));
+      $("#mCreated").text(ticket.created_at);
+      $("#mUpdated").text(ticket.updated_at);
+      $("#adminComment").val("");
+      $("#mComments").html("");
+
+      $.getJSON(`${API}?route=/api/tickets/view/${ticket.id}`, res => {
+        if (res.comments.length) {
+          $("#mComments").html(
+            res.comments.map(c =>
+              `<li>${c.body} <small>(${c.created_at})</small></li>`
+            ).join("")
+          );
+        } else {
+          $("#mComments").html("<li>Комментариев нет</li>");
+        }
+      });
+
+      $("#adminModal").fadeIn(150);
+    }
+
+    function closeModal() {
+      $("#adminModal").fadeOut(150);
+    }
+
+    function sendComment() {
+      const text = $("#adminComment").val().trim();
+      if (!text) return;
+
+      $.ajax({
+        url: `${API}?route=/api/admin/tickets/comment`,
+        method: "POST",
+        contentType: "application/json",
+        data: JSON.stringify({
+          ticket_id: openedTicketId,
+          comment: text
+        }),
+        success: () => {
+          closeModal();
+          loadTickets();
+        }
+      });
+    }
+
+    function changeStatus(ticketId, statusId) {
+      $.ajax({
+        url: `${API}?route=/api/admin/tickets/status`,
+        method: "POST",
+        contentType: "application/json",
+        data: JSON.stringify({ ticket_id: ticketId, status_id: statusId }),
+        success: loadTickets
+      });
+    }
+
+    function addTags(ticketId) {
+      const input = prompt("Введите ID тегов через запятую");
+      if (!input) return;
+
+      const tags = input.split(",").map(v => parseInt(v.trim())).filter(Boolean);
+
+      $.ajax({
+        url: `${API}?route=/api/admin/tickets/tags`,
+        method: "POST",
+        contentType: "application/json",
+        data: JSON.stringify({ ticket_id: ticketId, tags }),
+        success: loadTickets
+      });
+    }
+
+    $("#applyFilter").on("click", e => {
+      e.preventDefault();
+      loadTickets();
+    });
+
+    $("#logoutBtn").on("click", () => {
+      $.post(`${API}?route=/api/logout`, () => {
+        location.href = "login.html";
+      });
+    });
+
+    $(document).ready(loadTickets);
+  </script>
+
+</body>
+
+</html>

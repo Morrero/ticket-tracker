@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Мои тикеты</title>
+
+  <link rel="stylesheet" href="style.css">
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+
+<body>
+
+  <div class="container">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <h2>Мои тикеты</h2>
+      <button id="logoutBtn">Выход</button>
+    </div>
+
+    <h3>Создать тикет</h3>
+    <form id="ticketForm">
+      <input id="ticketTitle" placeholder="Заголовок" required>
+      <textarea id="ticketDesc" placeholder="Описание" required></textarea>
+      <button>Создать</button>
+    </form>
+
+    <h3>Фильтры</h3>
+    <div style="margin-bottom:12px;">
+      <select id="filterStatus">
+        <option value="">Все статусы</option>
+        <option value="1">ToDo</option>
+        <option value="2">InProgress</option>
+        <option value="3">Ready For Review</option>
+        <option value="4">Done</option>
+      </select>
+
+      <select id="filterSort">
+        <option value="created_at">Дата создания</option>
+        <option value="updated_at">Дата изменения</option>
+      </select>
+
+      <select id="filterDir">
+        <option value="desc">По убыванию</option>
+        <option value="asc">По возрастанию</option>
+      </select>
+
+      <button id="applyFilters">Применить</button>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Заголовок</th>
+          <th>Статус</th>
+          <th>Создан</th>
+          <th>Обновлён</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="ticketsList"></tbody>
+    </table>
+
+    <h3>Комментарии</h3>
+    <ul id="commentsList"></ul>
+  </div>
+
+  <script>
+    const api = "/api.php";
+
+    function statusText(id) {
+      return {
+        1: "ToDo",
+        2: "InProgress",
+        3: "Ready For Review",
+        4: "Done"
+      }[id] || id;
+    }
+
+    function loadTickets() {
+      const params = new URLSearchParams();
+
+      const status = $("#filterStatus").val();
+      if (status) params.append("status", status);
+
+      params.append("sort", $("#filterSort").val());
+      params.append("dir", $("#filterDir").val());
+
+      $.getJSON(api + "?route=/api/tickets/list&" + params, res => {
+        let html = "";
+
+        res.tickets.forEach(t => {
+          html += `
+        <tr>
+          <td>${t.id}</td>
+          <td>${t.title}</td>
+          <td>${statusText(t.status_id)}</td>
+          <td>${t.created_at}</td>
+          <td>${t.updated_at}</td>
+          <td>
+            <button class="secondary" onclick="openTicket(${t.id})">
+              Подробнее
+            </button>
+          </td>
+        </tr>
+      `;
+        });
+
+        $("#ticketsList").html(html);
+      });
+    }
+
+    function openTicket(id) {
+      $.getJSON(api + "?route=/api/tickets/view/" + id, res => {
+        if (!res.comments.length) {
+          $("#commentsList").html("<li class='muted'>Комментариев нет</li>");
+          return;
+        }
+
+        $("#commentsList").html(
+          res.comments.map(c => `<li>${c.body}</li>`).join("")
+        );
+      });
+    }
+
+    $("#applyFilters").on("click", e => {
+      e.preventDefault();
+      loadTickets();
+    });
+
+    $("#ticketForm").on("submit", e => {
+      e.preventDefault();
+
+      $.ajax({
+        url: api + "?route=/api/tickets/create",
+        method: "POST",
+        contentType: "application/json",
+        data: JSON.stringify({
+          title: $("#ticketTitle").val(),
+          description: $("#ticketDesc").val()
+        }),
+        success: () => {
+          $("#ticketTitle").val("");
+          $("#ticketDesc").val("");
+          loadTickets();
+        }
+      });
+    });
+
+    $("#logoutBtn").on("click", () => {
+      $.post(api + "?route=/api/logout", () => {
+        location.href = "login.html";
+      });
+    });
+
+    $(document).ready(loadTickets);
+  </script>
+
+</body>
+
+</html>
